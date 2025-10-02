@@ -3,8 +3,8 @@
 #include <WebServer.h>
 
 // ========== CONFIGURACIÓN WIFI ==========
-const char* ssid = "Asuncion5";           // ⚠ CAMBIAR
-const char* password = "44462987";        // ⚠ CAMBIAR
+const char* ssid = "Asuncion5";     // ⚠ CAMBIAR
+const char* password = "44462987";  // ⚠ CAMBIAR
 
 // Pines de conexión L298N a ESP32-CAM
 #define IN1 14  // Motor A - Dirección 1
@@ -12,8 +12,13 @@ const char* password = "44462987";        // ⚠ CAMBIAR
 #define IN3 13  // Motor B - Dirección 1
 #define IN4 12  // Motor B - Dirección 2
 #define LED 4
+
+//Control velocidad
+#define EN 2
+ 
+
 int gradosXseg = 360;
-float  velocidadRobot = 0.67f;
+float velocidadRobot = 0.67f;
 
 WebServer server(80);
 
@@ -24,17 +29,31 @@ unsigned long tiempoInicio = 0;
 void setup() {
   Serial.begin(115200);
   Serial.println("\n=== ESP32-CAM Control de Motores ===");
-  
+
   // Configurar pines
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
   pinMode(LED, OUTPUT);
-  
+
+  ledcAttachChannel(EN, 5000, 8, 0);
+
+  /* ledcSetup(canal, frecuencia, resolución_bits)
+
+canal → un número interno (ej. 0, 1, 2...) que identifica el canal PWM.
+
+frecuencia → la frecuencia del PWM (ej. 5000 Hz).
+
+resolución_bits → define cuántos pasos de PWM tienes (ej. 8 bits → 0 a 255).
+
+👉 Si usas 8 bits, el valor de velocidad va de 0 a 255.
+👉 Si usas 10 bits, va de 0 a 1023. */
+
+
   pararMotores();
   digitalWrite(LED, LOW);
-  
+
   // Conectar a WiFi
   Serial.print("Conectando a WiFi");
   WiFi.begin(ssid, password);
@@ -42,11 +61,11 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
-  
+
   Serial.println("\n✅ WiFi conectado!");
   Serial.print("📱 Dirección IP: ");
   Serial.println(WiFi.localIP());
-  
+
   // Rutas
   server.on("/", handleRoot);
   server.on("/adelante", handleAdelante);
@@ -60,13 +79,13 @@ void setup() {
   server.on("/horarioSegundo", handleHorarioSegundo);
 
   server.on("/adelanteMetros", []() {
-  if (server.hasArg("dist")) {
-    float metros = server.arg("dist").toFloat();
-    moverAdelanteMetros(metros);
-    server.send(200, "text/plain", "🚗 Avanzando " + String(metros) + " m");
-  } else {
-    server.send(400, "text/plain", "Falta parametro dist (ej: /adelanteMetros?dist=2.5)");
-  }
+    if (server.hasArg("dist")) {
+      float metros = server.arg("dist").toFloat();
+      moverAdelanteMetros(metros);
+      server.send(200, "text/plain", "🚗 Avanzando " + String(metros) + " m");
+    } else {
+      server.send(400, "text/plain", "Falta parametro dist (ej: /adelanteMetros?dist=2.5)");
+    }
   });
   server.on("/setGrados", []() {
     if (server.hasArg("valor")) {
@@ -95,7 +114,6 @@ void setup() {
 
 void loop() {
   server.handleClient();
-
   // Si hay un giro activo, controlar el tiempo
   if (giroActivo && millis() - tiempoInicio >= 1000) {
     pararMotores();
@@ -106,6 +124,7 @@ void loop() {
 
 // ========== FUNCIONES DE CONTROL ==========
 void girarHorario() {
+  ledcWrite(EN, 180);  
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
   digitalWrite(IN3, LOW);
@@ -113,6 +132,7 @@ void girarHorario() {
 }
 
 void girarAntihorario() {
+  ledcWrite(EN, 180); 
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, HIGH);
   digitalWrite(IN3, HIGH);
@@ -120,6 +140,7 @@ void girarAntihorario() {
 }
 
 void irAtras() {
+  ledcWrite(EN, 200); 
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
   digitalWrite(IN3, HIGH);
@@ -127,13 +148,15 @@ void irAtras() {
 }
 
 void irAdelante() {
+  ledcWrite(EN, 255); 
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, HIGH);
   digitalWrite(IN3, LOW);
   digitalWrite(IN4, HIGH);
 }
 
-void pararMotores() {
+void pararMotores() {  
+  ledcWrite(EN, 0); 
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, LOW);
   digitalWrite(IN3, LOW);
@@ -344,29 +367,42 @@ void handleirAdelanteTresMetros() {
 }
 
 void moverAdelanteMetros(float metros) {
-  unsigned long duracionMovimiento = (metros / velocidadRobot) * 1000; // tiempo en ms
+  unsigned long duracionMovimiento = (metros / velocidadRobot) * 1000;  // tiempo en ms
   irAdelante();
   delay(duracionMovimiento);  // 🚫 Bloquea todo
   pararMotores();
 }
 
+
 void girarAntiHorarioGrado(float grados) {
   if (grados <= 0) return;
-  if (gradosXseg <= 0) { Serial.println("⚠️ gradosXseg inválido"); return; }
 
-  const float base = (grados * 1000.0f) / (float)gradosXseg;
-  unsigned long msGiro = (unsigned long)roundf(base);
+  unsigned long msGiro;
 
-  if (grados < 100.0f) {
+  if (grados < 180) {
+    // Coeficientes ajustados
+    const double A = 252.75038195;
+    const double B = 228.90194064;
+
+    double disc = B * B + 4.0 * A * grados;
+    msGiro = (unsigned long)roundf((-B + sqrt(disc)) / (2.0 * A) * 1000);
+
+  } else {
+    const float base = (grados * 1000.0f) / (float)gradosXseg;
+    msGiro = (unsigned long)roundf(base);
+  }
+
+
+  /* if (grados < 100.0f) {
     msGiro += 20UL;
   } else if (grados <= 250.0f) {
     msGiro += 40UL;
   } else {
     // sin corrección extra
-  }
+  } */
 
   girarAntihorario();
-  delay(msGiro);   // bloquea
+  delay(msGiro);  // bloquea
   pararMotores();
 }
 
