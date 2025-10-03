@@ -1,8 +1,6 @@
 // Control de motores L298N con ESP32-CAM via WiFi
 #include <WiFi.h>
 #include <WebServer.h>
-#include <math.h>
-
 
 // ========== CONFIGURACIÓN WIFI ==========
 const char* ssid = "Asuncion5";     // ⚠ CAMBIAR
@@ -14,13 +12,10 @@ const char* password = "44462987";  // ⚠ CAMBIAR
 #define IN3 13  // Motor B - Dirección 1
 #define IN4 12  // Motor B - Dirección 2
 #define LED 4
-struct Punto{
-  public:
-    double x;
-    double y;
-};
 
-Punto inicial = {0, 0};  // punto inicial en (0,0)
+//Control velocidad
+#define EN 2
+ 
 
 int gradosXseg = 360;
 float velocidadRobot = 0.67f;
@@ -41,6 +36,20 @@ void setup() {
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
   pinMode(LED, OUTPUT);
+
+  ledcAttachChannel(EN, 5000, 8, 0);
+
+  /* ledcSetup(canal, frecuencia, resolución_bits)
+
+canal → un número interno (ej. 0, 1, 2...) que identifica el canal PWM.
+
+frecuencia → la frecuencia del PWM (ej. 5000 Hz).
+
+resolución_bits → define cuántos pasos de PWM tienes (ej. 8 bits → 0 a 255).
+
+👉 Si usas 8 bits, el valor de velocidad va de 0 a 255.
+👉 Si usas 10 bits, va de 0 a 1023. */
+
 
   pararMotores();
   digitalWrite(LED, LOW);
@@ -96,35 +105,6 @@ void setup() {
       server.send(400, "text/plain", "⚠️ Falta parámetro g (ej: /girarGrados?g=45)");
     }
   });
-server.on("/viajarPunto", [](){
-    if(server.hasArg("x") && server.hasArg("y")){
-        double x = server.arg("x").toDouble();
-        double y = server.arg("y").toDouble();
-        Punto destino = {x, y};
-        handleViajarPunto(destino, inicial, 0);
-        server.send(200, "text/plain", "🚗 Moviéndose al punto (" + String(x) + "," + String(y) + ")");
-    } else {
-        server.send(400, "text/plain", "⚠️ Falta parámetro x o y");
-    }
-});
-;
-// Handler para recibir 2 puntos (x1,y1) y (x2,y2)
-server.on("/viajarDosPuntos", []() {
-  if(server.hasArg("x1") && server.hasArg("y1") && server.hasArg("x2") && server.hasArg("y2")) {
-
-    Punto p1 = {server.arg("x1").toDouble(), server.arg("y1").toDouble()};
-    Punto p2 = {server.arg("x2").toDouble(), server.arg("y2").toDouble()};
-
-    handleViajar(p1, p2);  // inicial
-
-    server.send(200, "text/plain", "🚗 Viaje completado: (" +
-                String(p1.x) + "," + String(p1.y) + ") -> (" +
-                String(p2.x) + "," + String(p2.y) + ")");
-  } else {
-    server.send(400, "text/plain", "⚠️ Faltan parámetros: x1,y1,x2,y2");
-  }
-});
-
 
 
 
@@ -134,7 +114,6 @@ server.on("/viajarDosPuntos", []() {
 
 void loop() {
   server.handleClient();
-
   // Si hay un giro activo, controlar el tiempo
   if (giroActivo && millis() - tiempoInicio >= 1000) {
     pararMotores();
@@ -145,6 +124,7 @@ void loop() {
 
 // ========== FUNCIONES DE CONTROL ==========
 void girarHorario() {
+  ledcWrite(EN, 200);  
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
   digitalWrite(IN3, LOW);
@@ -152,6 +132,7 @@ void girarHorario() {
 }
 
 void girarAntihorario() {
+  ledcWrite(EN, 200); 
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, HIGH);
   digitalWrite(IN3, HIGH);
@@ -159,6 +140,7 @@ void girarAntihorario() {
 }
 
 void irAtras() {
+  ledcWrite(EN, 200); 
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
   digitalWrite(IN3, HIGH);
@@ -166,13 +148,15 @@ void irAtras() {
 }
 
 void irAdelante() {
+  ledcWrite(EN, 255); 
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, HIGH);
   digitalWrite(IN3, LOW);
   digitalWrite(IN4, HIGH);
 }
 
-void pararMotores() {
+void pararMotores() {  
+  ledcWrite(EN, 0); 
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, LOW);
   digitalWrite(IN3, LOW);
@@ -289,27 +273,6 @@ void handleRoot() {
              style="padding:10px; width:70%; border-radius:10px; border:1px solid #ccc;">
       <button class="btn btn-antihorario" onclick="girarGrados()">⟲ GIRAR GRADOS</button>
     </div>
-
-<!-- 🚀 NUEVO CONTROL: INGRESAR COORDENADAS -->
-<div style="margin-top:20px;">
-    <input type="number" id="coordX" placeholder="X (metros)" 
-           style="padding:10px; width:40%; border-radius:10px; border:1px solid #ccc;">
-    <input type="number" id="coordY" placeholder="Y (metros)" 
-           style="padding:10px; width:40%; border-radius:10px; border:1px solid #ccc;">
-    <button class="btn btn-adelante" onclick="viajarPunto()">🚀 IR AL PUNTO</button>
-    
-<!-- 🚀 VIAJE 2 PUNTOS -->
-<div style="margin-top:20px;">
-    <h3>📍 Viaje a 2 puntos</h3>
-    <input type="number" id="x1" placeholder="X1 (m)" style="padding:10px; width:45%; border-radius:10px; border:1px solid #ccc;">
-    <input type="number" id="y1" placeholder="Y1 (m)" style="padding:10px; width:45%; border-radius:10px; border:1px solid #ccc;"><br><br>
-    <input type="number" id="x2" placeholder="X2 (m)" style="padding:10px; width:45%; border-radius:10px; border:1px solid #ccc;">
-    <input type="number" id="y2" placeholder="Y2 (m)" style="padding:10px; width:45%; border-radius:10px; border:1px solid #ccc;"><br><br>
-    <button class="btn btn-adelante" onclick="viajarDosPuntos()">🚀 VIAJAR</button>
-</div>
-</div>
-</div>
-</div>
 </div>
 
 <script>
@@ -359,37 +322,6 @@ function girarGrados() {
   }
 }
 
-function viajarPunto() {
-    let x = parseFloat(document.getElementById("coordX").value);
-    let y = parseFloat(document.getElementById("coordY").value);
-
-    if(!isNaN(x) && !isNaN(y)){
-        fetch(`/viajarPunto?x=${x}&y=${y}`)
-            .then(r => r.text())
-            .then(data => { document.getElementById('status').textContent = data; })
-            .catch(_ => { document.getElementById('status').textContent = 'Error'; });
-    } else {
-        document.getElementById('status').textContent = "⚠️ Ingresá valores válidos";
-    }
-}
-
-function viajarDosPuntos() {
-    let x1 = parseFloat(document.getElementById("x1").value);
-    let y1 = parseFloat(document.getElementById("y1").value);
-    let x2 = parseFloat(document.getElementById("x2").value);
-    let y2 = parseFloat(document.getElementById("y2").value);
-
-    if(!isNaN(x1) && !isNaN(y1) && !isNaN(x2) && !isNaN(y2)){
-        fetch(`/viajarDosPuntos?x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}`)
-            .then(r => r.text())
-            .then(data => { document.getElementById('status').textContent = data; })
-            .catch(_ => { document.getElementById('status').textContent = 'Error'; });
-    } else {
-        document.getElementById('status').textContent = "⚠️ Ingresá valores válidos";
-    }
-}
-
-
 </script>
 </body>
 </html>
@@ -417,7 +349,7 @@ void handleHorario() {
 }
 
 void handleHorarioSegundo() {
-  irAdelante();
+  girarAntihorario()
   tiempoInicio = millis();
   giroActivo = true;
   Serial.println("➡️ Giro horario (1s)");
@@ -434,133 +366,45 @@ void handleirAdelanteTresMetros() {
   server.send(200, "text/plain", "➡️ Giro horario (1s)");
 }
 
-void moverAdelanteMetros(double metros) {
+void moverAdelanteMetros(float metros) {
   unsigned long duracionMovimiento = (metros / velocidadRobot) * 1000;  // tiempo en ms
   irAdelante();
   delay(duracionMovimiento);  // 🚫 Bloquea todo
   pararMotores();
 }
 
-void moverAtrasMetros(double metros) {
-  unsigned long duracionMovimiento = (metros / velocidadRobot) * 1000;  // tiempo en ms
-  irAtras();
-  delay(duracionMovimiento);  // 🚫 Bloquea todo
-  pararMotores();
-}
 
-struct PuntoVector {
-  float t;       // tiempo en ms
-  float grados;  // grados girados
-};
-
-// Tabla tiempo vs grados
-PuntoVector tabla[] = {
-  { 50, 15 },
-  { 75, 19 },
-  { 100, 25 },
-  { 125, 33 },
-  { 150, 40 },
-  { 200, 55 },
-  { 250, 70 },
-  { 300, 92 },
-  { 350, 115 },
-  { 400, 130 },
-};
-
-const int nTabla = sizeof(tabla) / sizeof(tabla[0]);
-// Buscar el tiempo necesario para lograr "gradosDeseados"
-float tiempoPorGrados(float gradosDeseados) {
-  // barrer la tabla en grados (inverso)
-  for (int i = 0; i < nTabla - 1; i++) {
-    if (gradosDeseados >= tabla[i].grados && gradosDeseados <= tabla[i + 1].grados) {
-      float x1 = tabla[i].grados;
-      float y1 = tabla[i].t;
-      float x2 = tabla[i + 1].grados;
-      float y2 = tabla[i + 1].t;
-
-      return y1 + (y2 - y1) * ((gradosDeseados - x1) / (x2 - x1));
-    }
-  }
-  // extrapolación
-  if (gradosDeseados < tabla[0].grados) return tabla[0].t;
-  return tabla[nTabla - 1].t;
-}
-
-// Función principal
-void girarAntiHorarioGrado(double grados) {
+void girarAntiHorarioGrado(float grados) {
   if (grados <= 0) return;
-  if (gradosXseg <= 0) {
-    Serial.println("⚠️ gradosXseg inválido");
-    return;
-  }
 
-  // tiempo teórico por fórmula base
-  double base = (grados * 1000.0f) / (double)gradosXseg;
-  double msGiro;
+  unsigned long msGiro;
 
-  if (grados <= 130) {
-    // usamos interpolación con la tabla
-    msGiro = tiempoPorGrados(grados);
+  if (grados < 180) {
+    // Coeficientes ajustados
+    const double A = 252.75038195;
+    const double B = 228.90194064;
+
+    double disc = B * B + 4.0 * A * grados;
+    msGiro = (unsigned long)roundf((-B + sqrt(disc)) / (2.0 * A) * 1000);
+
   } else {
-    // usamos el tiempo base directamente
-    msGiro = base;
+    const float base = (grados * 1000.0f) / (float)gradosXseg;
+    msGiro = (unsigned long)roundf(base);
   }
 
-  Serial.print("👉 Giro de ");
-  Serial.print(grados);
-  Serial.print("° | tiempo base = ");
-  Serial.print(base);
-  Serial.print(" ms | tiempo usado = ");
-  Serial.print(msGiro);
-  Serial.println(" ms");
+
+  /* if (grados < 100.0f) {
+    msGiro += 20UL;
+  } else if (grados <= 250.0f) {
+    msGiro += 40UL;
+  } else {
+    // sin corrección extra
+  } */
 
   girarAntihorario();
-  delay((unsigned long)roundf(msGiro));
+  delay(msGiro);  // bloquea
   pararMotores();
 }
-
-// Función para girar hacia un punto y avanzar
-double handleViajarPunto(Punto puntoFinal, Punto puntoInicial, double anguloAnt) {
-  double dx = puntoFinal.x - puntoInicial.x; // 0 - 0.5 = 0
-  double dy = puntoFinal.y - puntoInicial.y; // 0 - 0 = -0.5
-
-  // Calcular ángulo absoluto desde el eje X
-  double anguloGiro = atan2(dy, dx) * (180.0 / M_PI);
-
-  Serial.println(anguloGiro);
-
-  if (anguloGiro < 0 ) {
-    anguloGiro = anguloGiro + 360;
-    }
-  girarAntiHorarioGrado(fabs(anguloGiro - anguloAnt));
-
-
-  // Giramos siempre antihorario
-  
-
-  delay(500);
-  // Avanzamos la distancia al punto
-  double distancia = sqrt(dx*dx + dy*dy);
-  moverAdelanteMetros(distancia);
-  delay(500);
-
-  return anguloGiro; // devolvemos el ángulo actual
-}
-
-// Función para viajar a dos puntos consecutivos
-void handleViajar(Punto punto1, Punto punto2) {
-  double anguloActual = 0;
-
-  // Ir de inicial -> punto1
-  anguloActual = handleViajarPunto(punto1, inicial, anguloActual);
-
-  // Ir de punto1 -> punto2
-  anguloActual = handleViajarPunto(punto2, punto1, anguloActual);
-
-  // Volver de punto2 -> inicial
-  handleViajarPunto(inicial, punto2, anguloActual);
-}
-
 
 
 void handleAntihorario() {
@@ -582,6 +426,3 @@ void handleLuces() {
   Serial.println(mensaje);
   server.send(200, "text/plain", mensaje);
 }
-
-//Clases
-
