@@ -17,7 +17,7 @@ const char* password = "44462987";  // ⚠ CAMBIAR
 #define EN 2
  
 
-int gradosXseg = 360;
+int gradosXseg = 154;
 float velocidadRobot = 0.67f;
 
 WebServer server(80);
@@ -349,7 +349,7 @@ void handleHorario() {
 }
 
 void handleHorarioSegundo() {
-  girarAntihorario()
+  girarAntihorario();
   tiempoInicio = millis();
   giroActivo = true;
   Serial.println("➡️ Giro horario (1s)");
@@ -379,27 +379,9 @@ void girarAntiHorarioGrado(float grados) {
 
   unsigned long msGiro;
 
-  if (grados < 180) {
-    // Coeficientes ajustados
-    const double A = 252.75038195;
-    const double B = 228.90194064;
-
-    double disc = B * B + 4.0 * A * grados;
-    msGiro = (unsigned long)roundf((-B + sqrt(disc)) / (2.0 * A) * 1000);
-
-  } else {
-    const float base = (grados * 1000.0f) / (float)gradosXseg;
-    msGiro = (unsigned long)roundf(base);
-  }
-
-
-  /* if (grados < 100.0f) {
-    msGiro += 20UL;
-  } else if (grados <= 250.0f) {
-    msGiro += 40UL;
-  } else {
-    // sin corrección extra
-  } */
+  const float base = (grados * 1000.0f) / (float)gradosXseg;
+  msGiro = (unsigned long)roundf(base);
+  
 
   girarAntihorario();
   delay(msGiro);  // bloquea
