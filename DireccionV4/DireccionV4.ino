@@ -107,11 +107,11 @@ void setup() {
     }
   });
 
-  server.on("/viajarDosPuntos", []() {
+  server.on("/cebar", []() {
     if (server.hasArg("x1") && server.hasArg("y1") && server.hasArg("x2") && server.hasArg("y2")) {
       Punto p1 = {server.arg("x1").toDouble(), server.arg("y1").toDouble()};
       Punto p2 = {server.arg("x2").toDouble(), server.arg("y2").toDouble()};
-      handleViajar(p1, p2);
+      cebarMate2p(p1, p2);
       server.send(200, "text/plain", "🚗 Viaje completado: (" +
                   String(p1.x) + "," + String(p1.y) + ") -> (" +
                   String(p2.x) + "," + String(p2.y) + ")");
@@ -185,12 +185,12 @@ void handleRoot() {
 </div>
 
 <div style="margin-top:30px;">
-  <h3>📍 Viaje entre 2 puntos</h3>
+  <h3>📍 Cebar</h3>
   <input type="number" id="x1" placeholder="X1 (m)">
   <input type="number" id="y1" placeholder="Y1 (m)"><br>
   <input type="number" id="x2" placeholder="X2 (m)">
   <input type="number" id="y2" placeholder="Y2 (m)"><br>
-  <button class="btn-adelante" onclick="viajarDosPuntos()">🚀 Viajar</button>
+  <button class="btn-adelante" onclick="cebar()">🚀 Viajar</button>
 </div>
 
 <p id="status">Estado: Esperando orden...</p>
@@ -228,13 +228,13 @@ function viajarPunto() {
   }
 }
 
-function viajarDosPuntos() {
+function cebar() {
   let x1 = parseFloat(document.getElementById("x1").value);
   let y1 = parseFloat(document.getElementById("y1").value);
   let x2 = parseFloat(document.getElementById("x2").value);
   let y2 = parseFloat(document.getElementById("y2").value);
   if (!isNaN(x1) && !isNaN(y1) && !isNaN(x2) && !isNaN(y2)) {
-    fetch(`/viajarDosPuntos?x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}`)
+    fetch(`/cebar?x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}`)
       .then(r => r.text())
       .then(data => document.getElementById('status').textContent = data);
   } else {
@@ -346,22 +346,23 @@ double handleViajarPunto(Punto puntoFinal, Punto puntoInicial, double anguloAnt)
   double dy = puntoFinal.y - puntoInicial.y;
   double anguloGiro = atan2(dy, dx) * (180.0 / M_PI);
 
-  if (anguloGiro < 0) anguloGiro += 360;
+  //if (anguloGiro < 0) anguloGiro += 360;
 
   girarAntiHorarioGrado(fabs(anguloGiro - anguloAnt));
   delay(500);
 
   double distancia = sqrt(dx * dx + dy * dy);
   moverAdelanteMetros(distancia);
-  delay(500);
+  delay(5000);
+  moverAtrasMetros(distancia)
 
   return anguloGiro;
 }
 
-void handleViajar(Punto punto1, Punto punto2) {
+void cebarMate2p(Punto punto1, Punto punto2) {
   double anguloActual = 0;
   anguloActual = handleViajarPunto(punto1, inicial, anguloActual);
-  anguloActual = handleViajarPunto(punto2, punto1, anguloActual);
+  anguloActual = handleViajarPunto(punto2, inicial, anguloActual);
   handleViajarPunto(inicial, punto2, anguloActual);
 }
 
