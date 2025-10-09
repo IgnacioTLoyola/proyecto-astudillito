@@ -9,8 +9,8 @@
 #include <math.h>
 
 // ========== CONFIGURACIÓN WIFI ==========
-const char* ssid = "Asuncion5";     // ⚠ CAMBIAR
-const char* password = "44462987";  // ⚠ CAMBIAR
+const char* ssid = "HUAWEI-2.4G-Q5ug";     // ⚠ CAMBIAR
+const char* password = "Astkw8Vt";  // ⚠ CAMBIAR
 
 // Pines de conexión L298N a ESP32-CAM
 #define IN1 14  // Motor A - Dirección 1
@@ -250,14 +250,14 @@ function cebar() {
 }
 
 // ================== FUNCIONES MOTORES ==================
-void irAdelante() {
+void irAtras() {
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
   digitalWrite(IN3, HIGH);
   digitalWrite(IN4, LOW);
 }
 
-void irAtras() {
+void irAdelante() {
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, HIGH);
   digitalWrite(IN3, LOW);
@@ -354,7 +354,7 @@ double handleViajarPunto(Punto puntoFinal, Punto puntoInicial, double anguloAnt)
   double distancia = sqrt(dx * dx + dy * dy);
   moverAdelanteMetros(distancia);
   delay(5000);
-  moverAtrasMetros(distancia)
+  moverAtrasMetros(distancia);
 
   return anguloGiro;
 }
@@ -362,8 +362,9 @@ double handleViajarPunto(Punto puntoFinal, Punto puntoInicial, double anguloAnt)
 void cebarMate2p(Punto punto1, Punto punto2) {
   double anguloActual = 0;
   anguloActual = handleViajarPunto(punto1, inicial, anguloActual);
+  delay(200);
   anguloActual = handleViajarPunto(punto2, inicial, anguloActual);
-  handleViajarPunto(inicial, punto2, anguloActual);
+  delay(200);
 }
 
 // ================== HANDLERS ==================
