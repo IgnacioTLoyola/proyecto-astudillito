@@ -11,8 +11,8 @@
 // ==================================================================================
 
 // Configuración WiFi
-const char* ssid = "Asuncion5";     // ⚠ CAMBIAR por tu red WiFi
-const char* password = "44462987";  // ⚠ CAMBIAR por tu contraseña
+const char* ssid = "HUAWEI-2.4G-Q5ug";     // ⚠ CAMBIAR por tu red WiFi
+const char* password = "Astkw8Vt";  // ⚠ CAMBIAR por tu contraseña
 
 // Pines de conexión L298N a ESP32-CAM (revisá que estos pines sean compatibles con tu módulo)
 #define PIN_MOTOR_A_DIR1 14
