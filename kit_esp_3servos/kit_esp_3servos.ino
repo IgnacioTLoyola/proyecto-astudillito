@@ -12,7 +12,7 @@
 
 // Configuración WiFi
 const char* ssid = "HUAWEI-2.4G-Q5ug";     // ⚠ CAMBIAR por tu red WiFi
-const char* password = "Astkw8Vt";  // ⚠ CAMBIAR por tu contraseña
+const char* password = "Astkw8Vt";         // ⚠ CAMBIAR por tu contraseña
 
 // Pines de conexión L298N a ESP32-CAM (revisá que estos pines sean compatibles con tu módulo)
 #define PIN_MOTOR_A_DIR1 14
@@ -74,6 +74,40 @@ double navegarOrientacionInicial = 0;
 
 bool ejecutarRutaFlag = false;
 Coordenada rutaP1 = { 0, 0 }, rutaP2 = { 0, 0 };
+
+// ==================================================================================
+// SECCIÓN 2B: VARIABLES GLOBALES DE COORDENADAS GUARDADAS (sin timestamp)
+// ==================================================================================
+#define MAX_COORDENADAS_GUARDADAS 20
+
+struct CoordenadaGuardada {
+  double x;
+  double y;
+};
+
+CoordenadaGuardada coordenadasGuardadas[MAX_COORDENADAS_GUARDADAS];
+int totalCoordenadasGuardadas = 0;
+
+void guardarCoordenada(double x, double y) {
+  if (totalCoordenadasGuardadas >= MAX_COORDENADAS_GUARDADAS)
+    totalCoordenadasGuardadas = 0; // sobrescribe las viejas (modo circular)
+
+  coordenadasGuardadas[totalCoordenadasGuardadas++] = { x, y };
+  Serial.printf("💾 Coordenada guardada #%d: (%.2f, %.2f)\n", totalCoordenadasGuardadas, x, y);
+}
+
+String listarCoordenadasJSON() {
+  String json = "[";
+  for (int i = 0; i < totalCoordenadasGuardadas; i++) {
+    json += "{";
+    json += "\"x\":" + String(coordenadasGuardadas[i].x, 3) + ",";
+    json += "\"y\":" + String(coordenadasGuardadas[i].y, 3);
+    json += "}";
+    if (i < totalCoordenadasGuardadas - 1) json += ",";
+  }
+  json += "]";
+  return json;
+}
 
 // ==================================================================================
 // SECCIÓN 3: CONTROL DE MOTORES (BAJO NIVEL)
@@ -239,237 +273,225 @@ void manejarPaginaPrincipal() {
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel de Control - ESP32-CAM</title>
 <style>
-  body {
-    font-family: "Consolas", "Courier New", monospace;
-    background: #1a1f24;
-    color: #e0e0e0;
-    margin: 0;
-    padding: 0;
-  }
-  .panel {
-    max-width: 500px;
-    margin: 30px auto;
-    background: #2a3038;
-    border: 2px solid #3f4a55;
-    border-radius: 12px;
-    box-shadow: 0 0 25px rgba(0,0,0,0.4);
-    padding: 25px 30px;
-  }
-  h1 {
-    text-align: center;
-    color: #00b4d8;
-    margin-bottom: 15px;
-    font-size: 1.5em;
-  }
-  .status {
-    text-align: center;
-    background: #101417;
-    border: 1px solid #3f4a55;
-    border-radius: 6px;
-    padding: 10px;
-    font-weight: bold;
-    color: #90ee90;
-    margin-bottom: 20px;
-  }
-
-  /* Botones */
-  button {
-    border: none;
-    border-radius: 8px;
-    color: #fff;
-    font-size: 15px;
-    font-weight: bold;
-    cursor: pointer;
-    padding: 14px;
-    transition: transform 0.05s, background 0.15s;
-  }
-  button:active { transform: scale(0.96); }
-
-  .btn-adelante { background: #0077b6; }
-  .btn-atras { background: #f8961e; }
-  .btn-horario { background: #007f5f; }
-  .btn-antihorario { background: #9d0208; }
-  .btn-parar { background: #d62828; width: 80px; }
-  .btn-luces { background: #4361ee; width: 100%; margin-top: 10px; }
-  .btn-config { background: #adb5bd; color: #222; width: 100%; }
-
-  input[type=number] {
-    width: 70%;
-    padding: 10px;
-    border-radius: 6px;
-    border: 1px solid #555;
-    background: #181c20;
-    color: #fff;
-    margin: 4px 0;
-    text-align: center;
-  }
-
-  .section {
-    background: #21262b;
-    border: 1px solid #3f4a55;
-    border-radius: 8px;
-    padding: 12px 15px;
-    margin-top: 18px;
-  }
-  .section h3 {
-    color: #00b4d8;
-    border-bottom: 1px solid #3f4a55;
-    padding-bottom: 5px;
-    font-size: 1em;
-    text-align: center;
-  }
-
-  /* Control manual estilo cruceta */
-  .control-grid {
-    display: grid;
-    grid-template-columns: 80px 80px 80px;
-    grid-template-rows: 80px 80px 80px;
-    justify-content: center;
-    align-items: center;
-    gap: 5px;
-  }
-  .control-grid button { width: 80px; height: 80px; }
-
-  .footer {
-    text-align: center;
-    font-size: 0.8em;
-    margin-top: 15px;
-    color: #666;
-  }
+  body{font-family:ui-monospace,Consolas,"Courier New",monospace;background:#1a1f24;color:#e0e0e0;margin:0}
+  .panel{max-width:960px;margin:24px auto;background:#2a3038;border:2px solid #3f4a55;border-radius:12px;box-shadow:0 0 25px rgba(0,0,0,.4);padding:20px}
+  h1{color:#00b4d8;margin:0 0 10px;text-align:center}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .section{background:#21262b;border:1px solid #3f4a55;border-radius:10px;padding:12px}
+  .section h3{color:#00b4d8;border-bottom:1px solid #3f4a55;padding-bottom:6px;margin:0 0 10px;text-align:center;font-size:1.05rem}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  label{font-size:.9rem;opacity:.9}
+  input[type=number]{width:120px;padding:8px;border-radius:8px;border:1px solid #555;background:#181c20;color:#fff;text-align:center}
+  button{border:none;border-radius:10px;color:#fff;font-weight:700;padding:10px 12px;cursor:pointer}
+  .btn{background:#3a86ff}
+  .btn.clear{background:#d62828}
+  .btn.copy{background:#38b000}
+  .btn.save{background:#6a4c93}
+  .btn:active{transform:scale(.98)}
+  .status{background:#101417;border:1px solid #3f4a55;border-radius:8px;padding:10px;margin:10px 0;color:#90ee90;text-align:center}
+  canvas{width:100%;height:auto;background:#0f1317;border:1px solid #3f4a55;border-radius:8px;touch-action:none}
+  table{width:100%;border-collapse:collapse;font-size:.92rem}
+  th,td{border-bottom:1px solid #3f4a55;padding:6px 8px;text-align:right}
+  th{text-align:center;color:#9bd0ff}
+  .muted{opacity:.8;font-size:.85rem}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="panel">
   <h1>⚙️ PANEL DE CONTROL - ESP32</h1>
-  <div class="status" id="status">Sistema listo</div>
 
-  <!-- Control manual tipo cruceta -->
-  <div class="section">
-    <h3>🎮 Control Manual</h3>
-    <div class="control-grid">
-      <div></div>
-      <button class="btn-adelante" 
-        onmousedown="iniciarMovimiento('adelante')" onmouseup="detener()" 
-        ontouchstart="iniciarMovimiento('adelante')" ontouchend="detener()">⬆</button>
-      <div></div>
+  <div class="grid">
+    <!-- ========= Sección: Mesa + Canvas ========= -->
+    <div class="section">
+      <h3>📐 Mesa (metros) → Marcado de puntos</h3>
+      <div class="row" style="justify-content:space-between">
+        <div class="row">
+          <label>Ancho (X):</label>
+          <input type="number" id="mesaAncho" step="0.01" min="0.01" value="2.00">
+          <label>Alto (Y):</label>
+          <input type="number" id="mesaAlto" step="0.01" min="0.01" value="1.20">
+          <button class="btn" id="btnAplicar">Aplicar</button>
+        </div>
+        <div class="muted">Origen: <b>esquina inferior izquierda</b></div>
+      </div>
 
-      <button class="btn-antihorario" 
-        onmousedown="iniciarMovimiento('antihorario')" onmouseup="detener()" 
-        ontouchstart="iniciarMovimiento('antihorario')" ontouchend="detener()">⬅</button>
-
-      <button class="btn-parar" onclick="detener()">⛔</button>
-
-      <button class="btn-horario" 
-        onmousedown="iniciarMovimiento('horario')" onmouseup="detener()" 
-        ontouchstart="iniciarMovimiento('horario')" ontouchend="detener()">➡</button>
-
-      <div></div>
-      <button class="btn-atras" 
-        onmousedown="iniciarMovimiento('atras')" onmouseup="detener()" 
-        ontouchstart="iniciarMovimiento('atras')" ontouchend="detener()">⬇</button>
-      <div></div>
+      <div class="status" id="statusMesa">Mesa: 2.00 m × 1.20 m</div>
+      <canvas id="canvas" width="900" height="540"></canvas>
+      <div class="muted" style="margin-top:6px">Click/tap para agregar · Shift+click para borrar · Cebador fijo en (0, 0)</div>
     </div>
 
-    <button class="btn-luces" onclick="enviarComando('luces')">💡 LUCES</button>
-  </div>
+    <!-- ========= Sección: Puntos ========= -->
+    <div class="section">
+      <h3>📍 Puntos (m)</h3>
+      <div class="row" style="gap:6px;margin-bottom:8px">
+        <button class="btn copy" id="btnCopy">📋 Copiar JSON</button>
+        <button class="btn clear" id="btnClear">🗑 Limpiar</button>
+        <button class="btn save" id="btnGuardarSel">➕ Guardar puntos seleccionados</button>
+      </div>
 
-  <!-- Sección Configuración -->
-  <div class="section">
-    <h3>⚙️ Configuración</h3>
-    <input type="number" id="grados" value="360" placeholder="Grados por segundo">
-    <button class="btn-config" onclick="configurarGradosPorSegundo()">Actualizar</button>
-
-    <div style="display:flex; justify-content:space-between; margin-top:10px;">
-      <button style="flex:1; margin-right:5px;" class="btn-adelante" onclick="enviarComando('avanzarSegundo')">🚗 Avanzar 1 s</button>
-      <button style="flex:1; margin-left:5px;" class="btn-horario" onclick="enviarComando('antihorarioSegundo')">⟲ Girar 1 s</button>
-    </div>
-
-    <div style="margin-top:10px;">
-      <input type="number" id="gradosAntihorario" placeholder="Grados (ej: 45)">
-      <button class="btn-antihorario" onclick="girarGrados()">⟲ Girar Preciso</button>
+      <table><thead><tr><th>#</th><th>X</th><th>Y</th></tr></thead><tbody id="tbody"></tbody></table>
+      <div id="statusSend" class="status" style="display:none"></div>
     </div>
   </div>
 
-  <!-- Sección Navegación -->
-  <div class="section">
-    <h3>🧭 Navegación</h3>
-
-    <div>
-      <h4 style="text-align:center;margin:8px 0;">Navegación por Coordenadas</h4>
-      <input type="number" id="coordX" placeholder="X (m)">
-      <input type="number" id="coordY" placeholder="Y (m)">
-      <button class="btn-adelante" onclick="navegarAPunto()">🚀 IR AL PUNTO</button>
-    </div>
-
-    <div>
-      <h4 style="text-align:center;margin:8px 0;">Ruta Completa (2 Puntos)</h4>
-      <input type="number" id="x1" placeholder="X1 (m)">
-      <input type="number" id="y1" placeholder="Y1 (m)">
-      <input type="number" id="x2" placeholder="X2 (m)">
-      <input type="number" id="y2" placeholder="Y2 (m)">
-      <button class="btn-horario" onclick="ejecutarRuta()">🧭 Ejecutar Ruta</button>
-    </div>
-
-    <div>
-      <h4 style="text-align:center;margin:8px 0;">Movimiento por Distancia</h4>
-      <input type="number" id="metros" placeholder="Metros a avanzar">
-      <button class="btn-adelante" onclick="avanzarMetros()">🚗 Avanzar</button>
+  <div class="section" style="margin-top:16px">
+    <h3>🎮 Control rápido</h3>
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="fetchText('/adelante')">⬆ Adelante</button>
+      <button class="btn" onclick="fetchText('/atras')">⬇ Atrás</button>
+      <button class="btn" onclick="fetchText('/antihorario')">⬅ Giro Antihorario</button>
+      <button class="btn" onclick="fetchText('/horario')">➡ Giro Horario</button>
+      <button class="btn clear" onclick="fetchText('/parar')">⛔ Parar</button>
+      <button class="btn" onclick="fetchText('/luces')">💡 Luces</button>
     </div>
   </div>
 
-  <div class="footer">v1.1 - Control Industrial WiFi | ESP32-CAM</div>
+  <div class="muted" style="text-align:center;margin-top:10px">v1.4 · Guardado de puntos seleccionados en placa</div>
 </div>
 
+<!-- ============ SCRIPT COMPLETO ============ -->
 <script>
-function enviarComando(accion) {
-  fetch('/' + accion)
-    .then(r => r.text())
-    .then(data => { document.getElementById('status').textContent = data; })
-    .catch(_ => { document.getElementById('status').textContent = 'Error de conexión'; });
+function fetchText(path){
+  fetch(path).then(r=>r.text()).then(t=>{
+    const s=document.getElementById('statusSend');
+    if(!s)return;
+    s.style.display='block';s.textContent=t;
+    setTimeout(()=>s.style.display='none',2000);
+  }).catch(_=>alert('Error de conexión'));
 }
-function iniciarMovimiento(a){ enviarComando(a); }
-function detener(){ enviarComando('parar'); }
-function avanzarMetros(){
-  let m=document.getElementById("metros").value;
-  if(m>0) fetch('/avanzarMetros?distancia='+m).then(r=>r.text()).then(t=>status.textContent=t);
+
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+const tbody=document.getElementById('tbody');
+const statusMesa=document.getElementById('statusMesa');
+let mesa={ancho:2.00,alto:1.20};
+let puntos=[];
+let seleccion=new Set();
+const cebador={x:0,y:0}; // fijo
+
+function pxToM(xpx,ypx){
+  const xm=(xpx/canvas.width)*mesa.ancho;
+  const ym=((canvas.height-ypx)/canvas.height)*mesa.alto;
+  return {x:+xm.toFixed(3),y:+ym.toFixed(3)};
 }
-function configurarGradosPorSegundo(){
-  let g=document.getElementById("grados").value;
-  if(g>0) fetch('/configurarGradosPorSegundo?valor='+g).then(r=>r.text()).then(t=>status.textContent=t);
+function mToPx(xm,ym){
+  const xpx=(xm/mesa.ancho)*canvas.width;
+  const ypx=canvas.height-(ym/mesa.alto)*canvas.height;
+  return {x:xpx,y:ypx};
 }
-function girarGrados(){
-  let g=document.getElementById("gradosAntihorario").value;
-  if(g>0) fetch('/girarGrados?angulo='+g).then(r=>r.text()).then(t=>status.textContent=t);
+
+function draw(){
+  ctx.fillStyle='#0f1317';ctx.fillRect(0,0,canvas.width,canvas.height);
+  const paso=0.1;
+  ctx.lineWidth=1;ctx.strokeStyle='#1f2630';ctx.beginPath();
+  for(let x=0;x<=mesa.ancho+1e-9;x+=paso){const px=(x/mesa.ancho)*canvas.width;ctx.moveTo(px,0);ctx.lineTo(px,canvas.height);}
+  for(let y=0;y<=mesa.alto+1e-9;y+=paso){const py=canvas.height-(y/mesa.alto)*canvas.height;ctx.moveTo(0,py);ctx.lineTo(canvas.width,py);}
+  ctx.stroke();
+  ctx.strokeStyle='#324055';ctx.lineWidth=2;ctx.beginPath();
+  ctx.moveTo(0,canvas.height);ctx.lineTo(canvas.width,canvas.height);
+  ctx.moveTo(0,0);ctx.lineTo(0,canvas.height);ctx.stroke();
+  // cebador
+  {const {x,y}=mToPx(cebador.x,cebador.y);
+   ctx.beginPath();ctx.arc(x,y,7,0,Math.PI*2);
+   ctx.fillStyle='#ffd166';ctx.fill();
+   ctx.fillStyle='#ffe8a1';ctx.font='12px monospace';
+   ctx.fillText('Cebador (0,0)',x+10,y-10);}
+  // puntos
+  puntos.forEach((p,i)=>{
+    const {x,y}=mToPx(p.x,p.y);
+    ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);
+    ctx.fillStyle=seleccion.has(i)?'#00b4d8':'#38b000';ctx.fill();
+    ctx.fillStyle='#cbd5e1';ctx.font='12px monospace';
+    ctx.fillText(`${i+1} (${p.x},${p.y})`,x+8,y-8);
+  });
 }
-function navegarAPunto(){
-  let x=document.getElementById("coordX").value, y=document.getElementById("coordY").value;
-  if(x&&y) fetch(`/navegarAPunto?x=${x}&y=${y}`).then(r=>r.text()).then(t=>status.textContent=t);
+
+function renderTable(){
+  tbody.innerHTML='';
+  puntos.forEach((p,i)=>{
+    const tr=document.createElement('tr');
+    if(seleccion.has(i))tr.style.background='#193445';
+    tr.onclick=()=>{seleccion.has(i)?seleccion.delete(i):seleccion.add(i);renderTable();draw();};
+    tr.innerHTML=`<td style="text-align:center">${i+1}</td><td>${p.x.toFixed(3)}</td><td>${p.y.toFixed(3)}</td>`;
+    tbody.appendChild(tr);
+  });
 }
-function ejecutarRuta(){
-  let x1=document.getElementById("x1").value;
-  let y1=document.getElementById("y1").value;
-  let x2=document.getElementById("x2").value;
-  let y2=document.getElementById("y2").value;
-  if(x1&&y1&&x2&&y2){
-    fetch(`/ejecutarRuta?x1=${x1}&y1=${y1}&x2=${x2}&y2=${y2}`)
-      .then(r=>r.text())
-      .then(t=>status.textContent=t)
-      .catch(_=>status.textContent="⚠️ Error al enviar ruta");
-  } else status.textContent="❗ Ingresá todos los valores (X1,Y1,X2,Y2)";
+
+function canvasPos(evt){
+  const rect=canvas.getBoundingClientRect();
+  const scaleX=canvas.width/rect.width,scaleY=canvas.height/rect.height;
+  const cx=evt.clientX??(evt.touches&&evt.touches[0].clientX);
+  const cy=evt.clientY??(evt.touches&&evt.touches[0].clientY);
+  return {x:(cx-rect.left)*scaleX,y:(cy-rect.top)*scaleY};
 }
+function findNearestIndex(px,py){
+  let best=-1,bestD=1e9;
+  puntos.forEach((p,i)=>{const pt=mToPx(p.x,p.y);const dx=pt.x-px,dy=pt.y-py,d=dx*dx+dy*dy;if(d<bestD){bestD=d;best=i;}});
+  return best;
+}
+canvas.addEventListener('pointerdown',e=>{
+  canvas.setPointerCapture(e.pointerId);
+  const {x,y}=canvasPos(e);
+  if(e.shiftKey&&puntos.length){const i=findNearestIndex(x,y);if(i>-1){puntos.splice(i,1);seleccion.delete(i);seleccion=new Set([...seleccion].map(j=>j>i?j-1:j));}}
+  else{const m=pxToM(x,y);m.x=Math.max(0,Math.min(mesa.ancho,m.x));m.y=Math.max(0,Math.min(mesa.alto,m.y));puntos.push(m);}
+  renderTable();draw();
+},{passive:false});
+
+document.getElementById('btnAplicar').onclick=()=>{
+  const a=parseFloat(document.getElementById('mesaAncho').value),h=parseFloat(document.getElementById('mesaAlto').value);
+  if(!(a>0&&h>0))return alert('Medidas inválidas');
+  mesa.ancho=a;mesa.alto=h;statusMesa.textContent=`Mesa: ${a.toFixed(2)} m × ${h.toFixed(2)} m`;fitCanvas();
+};
+document.getElementById('btnClear').onclick=()=>{puntos=[];seleccion.clear();renderTable();draw();};
+document.getElementById('btnCopy').onclick=()=>{
+  const json=JSON.stringify([{label:'Cebador',x:0,y:0},...puntos],null,2);
+  navigator.clipboard.writeText(json).then(()=>alert('Puntos copiados'));
+};
+
+// === Nuevo: Guardar puntos seleccionados en la placa (sin mover el robot) ===
+document.getElementById('btnGuardarSel').onclick=async ()=>{
+  if(seleccion.size<1) return alert('Seleccioná al menos 1 punto.');
+  const idxs=[...seleccion].sort((a,b)=>a-b);
+  const reqs = idxs.map(i=>{
+    const p=puntos[i];
+    return fetch(`/agregarCoordenada?x=${p.x}&y=${p.y}`).then(r=>r.text());
+  });
+  try{
+    const results = await Promise.all(reqs);
+    const s=document.getElementById('statusSend');
+    s.style.display='block';
+    s.textContent=`✅ Guardados ${results.length} punto(s) en la placa`;
+    setTimeout(()=>s.style.display='none',2500);
+  }catch(e){
+    alert('Error al guardar puntos');
+  }
+};
+
+function fitCanvas(){
+  const panel=document.querySelector('.panel');
+  const w=(panel?panel.clientWidth:window.innerWidth)-48;
+  const maxW=Math.min(900,w);
+  const aspect=mesa.ancho/mesa.alto;
+  const targetW=Math.max(300,Math.round(maxW));
+  const targetH=Math.max(200,Math.round(targetW/aspect));
+  canvas.width=targetW;canvas.height=targetH;draw();
+}
+window.addEventListener('resize',fitCanvas);
+
+fitCanvas();renderTable();draw();
 </script>
 </body>
 </html>
-
 )rawliteral";
   servidor.send(200, "text/html", html);
 }
 
-// Handlers básicos (hacen set de flags o acciones directas)
+// Handlers básicos (acciones directas)
 void manejarComandoAdelante() {
   avanzarAdelante();
   Serial.println("🚗 Adelante");
@@ -505,7 +527,6 @@ void manejarComandoLuces() {
 
 void manejarComandoGiroTemporalAntihorario() {
   girarSentidoAntihorario();
-
   delay(1000);
   Serial.println("⬅️ Giro antihorario");
   servidor.send(200, "text/plain", "⬅️ Giro antihorario 1 seg");
@@ -513,12 +534,10 @@ void manejarComandoGiroTemporalAntihorario() {
 
 void manejarComandoAdelanteTemporalAdelante() {
   avanzarAdelante();
-
   delay(1000);
   Serial.println("🚗 Adelante");
   servidor.send(200, "text/plain", "🚗 Adelante 1 seg");
 }
-
 
 // Ruta: Avanzar X metros (no bloqueante: setea flag)
 void registrarAvanzar() {
@@ -561,7 +580,7 @@ void registrarGirarGrados() {
   servidor.send(200, "text/plain", "⟲ Giro solicitado: " + String(giroGradosPendientes) + "°");
 }
 
-// Ruta: Navegar a un punto (no bloqueante)
+// Ruta: Navegar a un punto (no bloqueante) + GUARDAR coordenada (opcional, puedes seguir usándola si querés)
 void registrarNavegarAPunto() {
   if (!(servidor.hasArg("x") && servidor.hasArg("y"))) {
     servidor.send(400, "text/plain", "⚠️ Faltan parámetros 'x' o 'y'");
@@ -573,11 +592,12 @@ void registrarNavegarAPunto() {
   }
   navegarDestino.x = servidor.arg("x").toDouble();
   navegarDestino.y = servidor.arg("y").toDouble();
+  guardarCoordenada(navegarDestino.x, navegarDestino.y); // 💾 guarda
   navegarFlag = true;
-  servidor.send(200, "text/plain", "🚗 Navegación solicitada a (" + String(navegarDestino.x) + "," + String(navegarDestino.y) + ")");
+  servidor.send(200, "text/plain", "🚗 Navegación a (" + String(navegarDestino.x) + "," + String(navegarDestino.y) + ") guardada");
 }
 
-// Ruta: Ejecutar ruta completa (no bloqueante)
+// Ruta: Ejecutar ruta completa (no bloqueante) + GUARDAR ambos puntos (opcional)
 void registrarEjecutarRuta() {
   if (!(servidor.hasArg("x1") && servidor.hasArg("y1") && servidor.hasArg("x2") && servidor.hasArg("y2"))) {
     servidor.send(400, "text/plain", "⚠️ Faltan parámetros de la ruta");
@@ -591,8 +611,27 @@ void registrarEjecutarRuta() {
   rutaP1.y = servidor.arg("y1").toDouble();
   rutaP2.x = servidor.arg("x2").toDouble();
   rutaP2.y = servidor.arg("y2").toDouble();
+  guardarCoordenada(rutaP1.x, rutaP1.y);
+  guardarCoordenada(rutaP2.x, rutaP2.y);
   ejecutarRutaFlag = true;
-  servidor.send(200, "text/plain", "🧭 Ruta recibida: (" + String(rutaP1.x) + "," + String(rutaP1.y) + ") -> (" + String(rutaP2.x) + "," + String(rutaP2.y) + ")");
+  servidor.send(200, "text/plain", "🧭 Ruta registrada y guardada");
+}
+
+// === Nuevo: agregar coordenada sin mover el robot ===
+void manejarAgregarCoordenada() {
+  if (!(servidor.hasArg("x") && servidor.hasArg("y"))) {
+    servidor.send(400, "text/plain", "⚠️ Faltan parámetros 'x' o 'y'");
+    return;
+  }
+  double x = servidor.arg("x").toDouble();
+  double y = servidor.arg("y").toDouble();
+  guardarCoordenada(x, y);
+  servidor.send(200, "text/plain", "✅ Coordenada (" + String(x,3) + "," + String(y,3) + ") guardada en la placa");
+}
+
+// Endpoint: devolver coordenadas guardadas en JSON
+void manejarCoordenadasGuardadas() {
+  servidor.send(200, "application/json", listarCoordenadasJSON());
 }
 
 // ==================================================================================
@@ -638,6 +677,10 @@ void setup() {
   servidor.on("/girarGrados", registrarGirarGrados);
   servidor.on("/navegarAPunto", registrarNavegarAPunto);
   servidor.on("/ejecutarRuta", registrarEjecutarRuta);
+
+  // Nuevos: guardar y consultar coordenadas
+  servidor.on("/agregarCoordenada", manejarAgregarCoordenada);
+  servidor.on("/coordenadas", manejarCoordenadasGuardadas);
 
   servidor.begin();
   Serial.println("🌐 Servidor web iniciado correctamente");
@@ -687,3 +730,47 @@ void loop() {
     }
   }
 }
+
+volatile bool pausa = false;
+volatile bool sesionMate = false;
+
+void SeguienterAccion (bool &bandera) {
+  if (bandera) {
+    bandera = false;
+  } else {
+    bandera = true;
+  }
+}
+
+void Mateada() {
+  if (coordenadasGuardadas.empty()) {
+  return;
+  }
+  sesionMate = true;
+  double anguloActual = 0;
+  while (sesionMate) {
+    for (auto tomador : coordenadasGuardadas) {
+      anguloActual = handleViajarPunto(tomador, inicial, anguloActual);
+      
+      pausa = true;
+      while (pausa == true) {
+        Serial.println("Espera un cachito que está tomando el verde");
+        delay(500);
+      }
+
+      moverAtrasMetros(distancia);
+
+      pausa = true;
+      while (pausa == true) {
+        Serial.println("Se está cebando");
+        delay(500);
+      }
+
+      delay(200);
+    }
+    girarAntiHorarioGrado(360 - anguloActual);
+  }
+}
+
+
+
